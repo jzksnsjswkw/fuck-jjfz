@@ -5,7 +5,7 @@ import re
 import threading
 import time
 from alive_progress import alive_bar
-from utils import print, cookie_to_dict, get_poem
+from utils import print, cookie_to_dict, get_poem, query_to_dict
 
 
 # 填这个
@@ -33,7 +33,9 @@ headers = {
     'X-Requested-With': 'XMLHttpRequest',
 }
 
-cookies = cookie_to_dict(cookie)
+cookie_dict = cookie_to_dict(cookie)
+session = requests.session()
+requests.utils.add_dict_to_cookiejar(session.cookies, cookie_dict)
 
 
 def study_time_wrapper(rid: str, _xsrf: str):
@@ -62,14 +64,8 @@ def study_time_wrapper(rid: str, _xsrf: str):
 
             if t >= 5:
                 try:
-                    res = requests.post(
-                        url, cookies=cookies, headers=headers, data=data
-                    )
-                    if res.status_code == 200:
-                        new_cookie = requests.utils.dict_from_cookiejar(res.cookies)
-                        cookies['u_id'] = new_cookie['u_id']
-                        # print(cookies)
-                    else:
+                    res = session.post(url, headers=headers, data=data)
+                    if res.status_code != 200:
                         print("study_time请求失败，响应状态码出错")
                 except Exception as e:
                     print("study_time请求失败", e)
@@ -107,15 +103,10 @@ def current_time(rid: str, _xsrf: str, video_duration: int | str, title: str) ->
                     time.sleep(30)
                     data['time'] = watched_duration
                     # print(data['time'])
-                    res = requests.post(
-                        url, cookies=cookies, headers=headers, data=data
-                    )
-                    if res.status_code == 200:
-                        new_cookie = requests.utils.dict_from_cookiejar(res.cookies)
-                        cookies['u_id'] = new_cookie['u_id']
-                        # print(cookies)
-
-                        watched_duration += 30
+                    res = session.post(url, headers=headers, data=data)
+                    if res.status_code != 200:
+                        print('current_time 响应状态码出错')
+                    watched_duration += 30
 
                 else:
                     time.sleep(video_duration - watched_duration)
@@ -137,17 +128,15 @@ def resource_record(resource_record_dict: dict, _xsrf: str) -> bool:
     url = f'https://{host}/jjfz/lesson/resource_record'
     resource_record_dict['_xsrf'] = _xsrf
 
-    res = requests.post(
-        url, cookies=cookies, headers=headers, data=resource_record_dict
-    ).json()
+    res = session.post(url, headers=headers, data=resource_record_dict).json()
     if res['code'] == 1:
         return True
     return False
 
 
-def get_video_list(lesson_id: int | str) -> list:
-    url = f'https://{host}/jjfz/lesson/video?lesson_id={lesson_id}'
-    res = requests.get(url, cookies=cookies, headers=headers).text
+def get_video_list(lesson_id: int | str, page: int | str = 1) -> list:
+    url = f'https://{host}/jjfz/lesson/video?lesson_id={lesson_id}&page={page}'
+    res = session.get(url, headers=headers).text
 
     soup = BeautifulSoup(res, 'lxml')
     li_list = soup.select('.lesson1_lists ul li')
@@ -178,19 +167,27 @@ def get_video_list(lesson_id: int | str) -> list:
             }
             video_list.append(video_info)
 
+    # 判断分页
+    a_list = soup.select('.pages a')
+    for a in a_list:
+        if a.string == '下一页':
+            buf = query_to_dict(a.get('href').rsplit(('?'), 1)[1])
+            # print(buf)
+            video_list += get_video_list(buf['lesson_id'], buf['page'])
+
     return video_list
 
 
 def get_video_info(url: str, title: str):
     def get_duration(m3u8_url: str) -> float:
-        buf = requests.get(m3u8_url, cookies=cookies, headers=headers).text
+        buf = session.get(m3u8_url, headers=headers).text
         a = re.findall(r'#EXTINF:(.*?),', buf)
         duration = 0.0
         for i in a:
             duration += float(i)
         return duration
 
-    res = requests.get(url, cookies=cookies, headers=headers).text
+    res = session.get(url, headers=headers).text
 
     _xsrf = re.search(r'name="_xsrf" value="(.*?)"', res).group(1)
 
@@ -231,7 +228,7 @@ def get_video_info(url: str, title: str):
 
 def get_course_list() -> list:
     url = f'https://{host}/jjfz/lesson'
-    res = requests.get(url, cookies=cookies, headers=headers).text
+    res = session.get(url, headers=headers).text
 
     soup = BeautifulSoup(res, 'lxml')
     buf = soup.select('.lesson_c_ul li')
