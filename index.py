@@ -1,4 +1,5 @@
 from math import ceil
+from random import uniform
 import requests
 from bs4 import BeautifulSoup
 import re
@@ -76,24 +77,22 @@ def study_time_wrapper(rid: str, _xsrf: str):
     return study_time, stop_study_time
 
 
-def current_time(rid: str, _xsrf: str, video_duration: int | str, title: str) -> bool:
+def current_time(rid: str, _xsrf: str, video_duration: float | str, title: str) -> bool:
     global cookies
 
     url = f'https://{host}/jjfz/lesson/current_time'
     data = {
         'rid': rid,
-        "time": 0,
+        "time": 0.0,
         "_xsrf": _xsrf,
     }
 
-    number = ceil(video_duration / 30)
+    number = ceil(video_duration / 30.0)
 
-    watched_duration = 30
+    watched_duration = 30.0
     with alive_bar(len(range(number)), calibrate=5, title=title) as bar:
         for _ in range(number):
-            bar()  # 显示进度
             bar.text(get_poem())
-
             # 刷完
             if watched_duration == video_duration:
                 return
@@ -101,7 +100,7 @@ def current_time(rid: str, _xsrf: str, video_duration: int | str, title: str) ->
             try:
                 if video_duration - watched_duration >= 30:
                     time.sleep(30)
-                    data['time'] = watched_duration
+                    data['time'] = watched_duration + round(uniform(0, 1), 6)
                     # print(data['time'])
                     res = session.post(url, headers=headers, data=data)
                     if res.status_code != 200:
@@ -114,14 +113,16 @@ def current_time(rid: str, _xsrf: str, video_duration: int | str, title: str) ->
             except Exception as e:
                 print('current_time err', e)
 
+            bar()  # 显示进度
+
 
 def no_current_time(video_duration: int | str, title: str) -> None:
     number = ceil(int(video_duration))
     with alive_bar(len(range(number)), calibrate=5, title=title) as bar:
         for _ in range(number):
-            bar()  # 显示进度
             bar.text(get_poem())
             time.sleep(1)
+            bar()  # 显示进度
 
 
 def resource_record(resource_record_dict: dict, _xsrf: str) -> bool:
