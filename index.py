@@ -255,7 +255,7 @@ def fuck(video_info: dict) -> None:
 
     study_time_thread = threading.Thread(target=study_time)
 
-    if 'current_time_rid' in video_info:
+    if video_info['current_time_rid'] is None:
         current_time_thread = threading.Thread(
             target=current_time,
             args=(
